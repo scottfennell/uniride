@@ -192,10 +192,10 @@ void init_IO()
 
 void init_cal()
 {
-  K_angle = 34 * 25.6;		//换算系数：256/10 =25.6；
-  K_angle_dot = 2 * 25.6;		//换算系数：256/10 =25.6;
-  K_position = 0.8 * 0.209;		//换算系数：(256/10) * (2*pi/(64*12))=0.20944；//256/10:电压换算至PWM，256对应10V；
-  K_position_dot = 1.09 * 20.9;		//换算系数：(256/10) * (25*2*pi/(64*12))=20.944;
+  K_angle = 34 * 25.6;		//Conversion factor：256/10 =25.6；
+  K_angle_dot = 2 * 25.6;		//Conversion factor: 256/10 =25.6;
+  K_position = 0.8 * 0.209;		//Conversion factor: (256/10) * (2*pi/(64*12))=0.20944；//256/10:Voltage conversion to PWM，256 is about 10V；
+  K_position_dot = 1.09 * 20.9;		//Conversion Factor：(256/10) * (25*2*pi/(64*12))=20.944;
 }
 
 void control()
@@ -221,20 +221,20 @@ void PWM_calculate(void)
   K_position_AD = -0.31;//(analogRead(K_POS_AD)-512) * 0.0007;
   K_position_dot_AD = -0.31;//(analogRead(K_POS_DOT_AD)-512) * 0.0007;
   
-  position_dot = (speed_real_l + speed_real_r)*0.5;  //利用编码器求车轮的平均速度
+  position_dot = (speed_real_l + speed_real_r)*0.5;  //Request by the encoder wheel average speed
 
-  position_dot_filter*=0.95;		//车轮速度低通滤波
+  position_dot_filter*=0.95;		//Wheel speed low pass filter
   position_dot_filter+=position_dot*0.05;
   
-  position_add+=position_dot_filter;  //求得车轮的位置
-  position_add+=Speed_Need;  //求得所期望的车轮位置
+  position_add+=position_dot_filter;  //Calculated wheel position
+  position_add+=Speed_Need;  //Obtain a desired position of the wheels
   	
   if(position_add<-10000)
     position_add=-10000;
   else if(position_add>10000)
     position_add=10000;
 
-  //求总体的PWM
+  //Seeking overall PWM
   pwm = K_angle * angle * K_angle_AD
       + K_angle_dot * angular_rate * K_angle_dot_AD
       + K_position * position_add * K_position_AD
