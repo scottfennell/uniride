@@ -37,11 +37,8 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 
 double K_angle,K_angle_dot,K_position,K_position_dot;
 double K_angle_AD,K_angle_dot_AD,K_position_AD,K_position_dot_AD;
-double position_add,position_dot;
-double position_dot_filter;
-int speed_real_l,speed_real_r;
+double position_add;
 int pwm,pwm_l,pwm_r;
-int Turn_Need,Speed_Need;
 float angle, angular_rate;
 bool blinkState = false;
 int rx_count=0;
@@ -151,16 +148,9 @@ void loop()
     mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
     
     // angle and angular rate unit: radian
-//    angle_X = ypr[2] + 0;                  // 0.017 is center of gravity offset
-//    angular_rate_X = -((double)gyro[0]/131.0); // converted to radian
     angle = ypr[1] + 0.06;                   // 0.02 is center of gravity offset
     angular_rate = -((double)gyro[1]/131.0); // converted to radian
-//
-//    Serial.print(angle * RAD_TO_DEG);Serial.print("  ");
-//    Serial.print(angular_rate * RAD_TO_DEG);Serial.print("  ");
-//    Serial.print("\n");
-
-    control();
+    
     PWM_calculate();
   
     // blink LED to indicate activity
@@ -185,64 +175,26 @@ void init_IO()
   pinMode(A1, INPUT);digitalWrite(A1, HIGH);
   pinMode(A2, INPUT);digitalWrite(A2, HIGH);
   pinMode(A3, INPUT);digitalWrite(A3, HIGH);
-  // configure external interruption
-  attachInterrupt(SPD_INT_L, speed_int_l, RISING);
-  attachInterrupt(SPD_INT_R, speed_int_r, RISING);
+
 }
 
 void init_cal()
 {
   K_angle = 34 * 25.6;		//Conversion factor：256/10 =25.6；
   K_angle_dot = 2 * 25.6;		//Conversion factor: 256/10 =25.6;
-  K_position = 0.8 * 0.209;		//Conversion factor: (256/10) * (2*pi/(64*12))=0.20944；//256/10:Voltage conversion to PWM，256 is about 10V；
-  K_position_dot = 1.09 * 20.9;		//Conversion Factor：(256/10) * (25*2*pi/(64*12))=20.944;
 }
 
-void control()
-{
-  if(!digitalRead(A0)) Speed_Need = 40;
-  else if(!digitalRead(A1)) Speed_Need = -40;
-
-  if(!digitalRead(A2)) Turn_Need = 150;
-  else if(!digitalRead(A3)) Turn_Need = 150;
-
-  if(++rx_count > 200)
-  {
-    rx_count = 0;
-    Speed_Need = 0;
-    Turn_Need = 0;
-  }
-}
 void PWM_calculate(void)	
 {
 
   K_angle_AD = -7.35;//(analogRead(K_AGL_AD)-512) * 0.03;
   K_angle_dot_AD = -10.11;//(analogRead(K_AGL_DOT_AD)-512) * 0.03;
-  K_position_AD = -0.31;//(analogRead(K_POS_AD)-512) * 0.0007;
-  K_position_dot_AD = -0.31;//(analogRead(K_POS_DOT_AD)-512) * 0.0007;
-  
-  position_dot = (speed_real_l + speed_real_r)*0.5;  //Request by the encoder wheel average speed
-
-  position_dot_filter*=0.95;		//Wheel speed low pass filter
-  position_dot_filter+=position_dot*0.05;
-  
-  position_add+=position_dot_filter;  //Calculated wheel position
-  position_add+=Speed_Need;  //Obtain a desired position of the wheels
-  	
-  if(position_add<-10000)
-    position_add=-10000;
-  else if(position_add>10000)
-    position_add=10000;
-
+ 	
   //Seeking overall PWM
   pwm = K_angle * angle * K_angle_AD
       + K_angle_dot * angular_rate * K_angle_dot_AD
-      + K_position * position_add * K_position_AD
-      + K_position_dot * position_dot_filter * K_position_dot_AD;
       
-  pwm_r = pwm + Turn_Need;
-  pwm_l = pwm + Turn_Need;
-  pwm_out(pwm_l,pwm_r);
+  pwm_out(pwm);
 /* 
   Serial.write(char(gyroYrate*RAD_TO_DEG+128));
   Serial.write(char(kalAngleY*RAD_TO_DEG+128));
@@ -261,24 +213,19 @@ void PWM_calculate(void)
   Serial.print("\r\n");
 */
 
-  Serial.print(pwm_r);Serial.print("\t");
-  Serial.print(pwm_l);Serial.print("\t");
+  Serial.print(pwm);Serial.print("\t");
   Serial.print("\r\n");
-
-
-  speed_real_l = 0;
-  speed_real_r = 0;
 }
 
-void pwm_out(int l_val,int r_val)
+void pwm_out(int val)
 {
   int rev = 0;
-  if (l_val<0)
+  if (val<0)
   {
     digitalWrite(DIR_L1, HIGH);
     digitalWrite(DIR_L2, LOW);
     rev = 1;
-    l_val=-l_val;
+    val=-val;
   }
   else
   {
@@ -286,45 +233,15 @@ void pwm_out(int l_val,int r_val)
     digitalWrite(DIR_L2, HIGH);
   }
   
-  if (r_val<0)
-  {
-    digitalWrite(DIR_R1, HIGH);
-    digitalWrite(DIR_R2, LOW);
-    r_val=-r_val;
-  }
-  else
-  {
-    digitalWrite(DIR_R1, LOW);
-    digitalWrite(DIR_R2, HIGH);
-  }
-  l_val=l_val+5;
-  r_val=r_val+30;
-  
   //Writing pin 10 for L
   //Dir L is direction for L at pin 6 and the inverse, L2 at 12 (as written
   //Using PWM_R as the motor reverse bit, uses the PWM for high
   //With the L_EN and R_EN pins connected to 5v - if they where
   if (rev) {
-    analogWrite(PWM_R, l_val>255? 255:l_val);
+    analogWrite(PWM_R, val>255? 255:val);
     analogWrite(PWM_L, 0);
   } else {
-    analogWrite(PWM_L, r_val>255? 255:r_val);
+    analogWrite(PWM_L, val>255? 255:val);
     analogWrite(PWM_R, 0);
   }
-}
-
-void speed_int_l()
-{
-  if (digitalRead(SPD_PUL_L))
-    speed_real_l-=1;
-  else
-    speed_real_l+=1;
-}
-
-void speed_int_r()
-{
-  if (digitalRead(SPD_PUL_R))
-    speed_real_r-=1;
-  else
-    speed_real_r+=1;
 }
